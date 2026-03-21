@@ -1,4 +1,5 @@
 import createModule from './native/chess_api.js';
+import wasmUrl from './native/chess_api.wasm?url';
 import type { MainModule, ChessGame } from './native/chess_api.d.ts';
 
 export type { ChessGame };
@@ -8,8 +9,16 @@ let game: ChessGame;
 let modulePromise: Promise<MainModule>;
 
 export async function init() {
+  const isNode = typeof process !== 'undefined';
   if (!modulePromise) {
-    modulePromise = createModule().then((m) => {
+    function locateFile(url: string) {
+      if (!isNode) return wasmUrl;
+
+    const fs = require('fs');
+    const path = require('path');
+    return path.resolve(__dirname, './native/chess_api.wasm');
+    }
+    modulePromise = createModule({ locateFile }).then((m) => {
       mod = m;
       mod.initChess();
       return mod;
