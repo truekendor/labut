@@ -1,5 +1,18 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { createGame, type ChessGame } from '../index.ts';
+import { init, type ChessGame } from '../index.ts';
+
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+export async function createGame(fen: string = START_FEN, isChess960 = false): Promise<ChessGame> {
+  const mod = await init();
+  const game = new mod.ChessGame(fen, isChess960);
+  if (game.hasErr()) {
+    const err = game.getErr();
+    game.delete();
+    throw new Error(err);
+  }
+  return game;
+}
 
 describe('ChessGame', () => {
   let game: ChessGame;
@@ -95,7 +108,7 @@ describe('ChessGame', () => {
   });
 
   it('rejects chess960 castling in normal mode', async () => {
-    game = await createGame('rn2k1r1/ppp1pp1p/3p2p1/5bn1/P7/2N2B2/1PPPPP2/2BNK1RR w Gkq - 4 11', false);
+    game = await createGame('rn2k1r1/ppp1pp1p/3p2p1/5bn1/P7/2N2B2/1PPPPP2/2BNK1RR w KQkq - 4 11', false);
     const err = game.playMoves('e1g1', false);
     expect(game.getErr()).toBe("Illegal move: e1g1");
     expect(err).toBe(true);
@@ -117,15 +130,54 @@ describe('ChessGame', () => {
     expect(err).toBe(true);
   });
 
-  it('handles ambiguous pawn capture', /* TODO */);
+  it('handles ambiguous pawn capture', async () => {
+    // Two pawns can capture on the same square
+    game = await createGame('4k3/8/8/3p4/2P1P3/8/8/4K3 w - - 0 1');
+    const err = game.playMoves('exd5', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('exd5');
+  });
 
-  it('handles double pawn push discovered check', /* TODO */);
+  it('handles double pawn push discovered check', async () => {
+    // Bishop on c1 discovers check when pawn moves from d2 to d4
+    game = await createGame('4k3/8/8/8/8/8/3P4/2B1K3 w - - 0 1');
+    const err = game.playMoves('d2d4', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('d4');
+  });
 
-  it('handles en passant capture', /* TODO */);
+  it('handles en passant capture', async () => {
+    game = await createGame('rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 1');
+    const err = game.playMoves('exd6', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('exd6');
+  });
 
-  it('rejects invalid en passant with horizontal pin', /* TODO */);
+  it('rejects invalid en passant with horizontal pin', async () => {
+    // Pawn is pinned horizontally by rook — en passant would expose king
+    game = await createGame('8/8/8/r2pP1K1/8/8/8/4k3 w - d6 0 1');
+    const err = game.playMoves('exd6', false);
+    expect(game.getErr()).toBe("Illegal move: exd6");
+    expect(err).toBe(true);
+  });
 
-  it('handles en passant capture with stm in check by the to-be-captured pawn', /* TODO */);
+  it('handles en passant capture with stm in check by the to-be-captured pawn', async () => {
+    // The pawn that just double-pushed is giving discovered check, and en passant resolves it
+    game = await createGame('8/8/8/2K5/3pP3/8/8/4k3 b - e3 0 1');
+    const err = game.playMoves('dxe3', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('dxe3');
+  });
 
-  it('rejects invalid en passant with stm in check', /* TODO */);
+  it('rejects invalid en passant with stm in check', async () => {
+    // King is in check from a piece, and en passant doesn't resolve it
+    game = await createGame('4K3/8/8/8/3pP3/8/8/3Qk3 b - e3 0 1');
+    const err = game.playMoves('dxe3', false);
+    expect(game.getErr()).toBe("Illegal move: dxe3");
+    expect(err).toBe(true);
+  });
 });
