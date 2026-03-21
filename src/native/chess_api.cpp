@@ -30,6 +30,10 @@ constexpr PieceType promoMap[26] = {
 
 constexpr const char* PieceToChar = " PNBRQK   pnbrqk ";
 
+// Used as a temporary buffer to write out moves
+static char *movesEnd;
+static char movesStr[100000];
+
 class ChessGame {
 public:
     ChessGame(const std::string& fen, bool isChess960) {
@@ -106,8 +110,19 @@ public:
                     }
 
                     pc = pos.piece_on(sq);
-                    if (type_of(pc) == KING && (std::abs(file_of(sq) - file_of(toSq)) >= 2 || pos.piece_on(toSq) == make_piece(us, ROOK)))
+                    bool capturingRook = pos.piece_on(toSq) == make_piece(us, ROOK);
+                    if (type_of(pc) == KING && (std::abs(file_of(sq) - file_of(toSq)) >= 2 || capturingRook)) {
+                        if (!capturingRook) {
+                            // Search for a rook in the correct direction
+                            int step = toSq > sq ? 1 : -1;
+                            int m = file_of(sq);
+                            while (m >= 0 && m <= 7) {
+                                if (pos.piece_on(toSq = make_square(File(m), *r)) == make_piece(us, ROOK)) break;
+                                m += step;
+                            }
+                        }
                         candidate = Move::make<CASTLING>(sq, toSq);
+                    }
                     break;
                 }
 
@@ -354,8 +369,6 @@ private:
     StateListPtr states;
 
     std::optional<std::string> err;
-    char *movesEnd;
-    char movesStr[100000];
 };
 
 void initChess() {
