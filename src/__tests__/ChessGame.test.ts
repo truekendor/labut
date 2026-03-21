@@ -16,28 +16,32 @@ describe('ChessGame', () => {
   it('plays LAN moves and outputs SAN', async () => {
     game = await createGame();
     const err = game.playMoves('e2e4 e7e5 g1f3 b8c6 f1b5', false);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('e4 e5 Nf3 Nc6 Bb5');
+    expect(game.getMovesString()).toBe('e4 e5 Nf3 Nc6 Bb5');
   });
 
   it('plays LAN moves and outputs LAN', async () => {
     game = await createGame();
     const err = game.playMoves('e2e4 e7e5 g1f3', true);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('e2e4 e7e5 g1f3');
+    expect(game.getMovesString()).toBe('e2e4 e7e5 g1f3');
   });
 
   it('accepts SAN piece moves (non-pawn)', async () => {
     // Use LAN for pawn moves, SAN for piece moves
     game = await createGame();
     const err = game.playMoves('e2e4 e7e5 Nf3 Nc6 Bb5', false);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('e4 e5 Nf3 Nc6 Bb5');
+    expect(game.getMovesString()).toBe('e4 e5 Nf3 Nc6 Bb5');
   });
 
   it('rejects illegal moves', async () => {
     game = await createGame();
     const err = game.playMoves('e2e4 e2e4', false);
+    expect(game.getErr()).toBe("Illegal move: e2e4");
     expect(err).toBe(true);
     expect(game.hasErr()).toBe(true);
     expect(game.getErr()).toContain('Illegal move');
@@ -51,30 +55,77 @@ describe('ChessGame', () => {
     game = await createGame();
     game.playMoves('e2e4 e7e5', false);
     game.reset('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', false);
+    expect(game.getErr()).toBe("");
     expect(game.hasErr()).toBe(false);
     const err = game.playMoves('d2d4 d7d5', false);
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('d4 d5');
+    expect(game.getMovesString()).toBe('d4 d5');
   });
 
   it('handles castling', async () => {
     game = await createGame();
     const err = game.playMoves('e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 O-O', false);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toContain('O-O');
+    expect(game.getMovesString()).toContain('O-O');
   });
 
   it('handles pawn promotion', async () => {
     game = await createGame('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
     const err = game.playMoves('a8=Q', false);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('a8=Q+');
+    expect(game.getMovesString()).toBe('a8=Q+');
+  });
+
+  it('handles pawn capture', async () => {
+    game = await createGame('4k3/q7/1P6/8/8/8/8/4K3 w - - 0 1');
+    const err = game.playMoves('bxa7', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('bxa7');
   });
 
   it('handles pawn promotion-capture', async () => {
     game = await createGame('1q2k3/P7/8/8/8/8/8/4K3 w - - 0 1');
-    const err = game.playMoves('axb7=R', false);
+    const err = game.playMoves('axb8=R', false);
+    expect(game.getErr()).toBe("");
     expect(err).toBe(false);
-    expect(game.getSanMovesString()).toBe('axb7=R+');
+    expect(game.getMovesString()).toBe('axb8=R+');
   });
+
+  it('rejects chess960 castling in normal mode', async () => {
+    game = await createGame('rn2k1r1/ppp1pp1p/3p2p1/5bn1/P7/2N2B2/1PPPPP2/2BNK1RR w Gkq - 4 11', false);
+    const err = game.playMoves('e1g1', false);
+    expect(game.getErr()).toBe("Illegal move: e1g1");
+    expect(err).toBe(true);
+  });
+
+  it('handles chess960 castling', async () => {
+    game = await createGame('rn2k1r1/ppp1pp1p/3p2p1/5bn1/P7/2N2B2/1PPPPP2/2BNK1RR w Gkq - 4 11', true);
+    const err = game.playMoves('e1g1', false);
+    expect(game.getErr()).toBe("");
+    expect(err).toBe(false);
+    expect(game.getMovesString()).toBe('O-O');
+  });
+
+  it('handles illegal chess960 castling', async () => {
+    // Trying to castle with the H rook :woozy:
+    game = await createGame('rn2k1r1/ppp1pp1p/3p2p1/5bn1/P7/2N2B2/1PPPPP2/2BNK1RR w Hkq - 4 11', true);
+    const err = game.playMoves('e1g1', false);
+    expect(game.getErr()).toBe("Illegal move: e1g1");
+    expect(err).toBe(true);
+  });
+
+  it('handles ambiguous pawn capture', /* TODO */);
+
+  it('handles double pawn push discovered check', /* TODO */);
+
+  it('handles en passant capture', /* TODO */);
+
+  it('rejects invalid en passant with horizontal pin', /* TODO */);
+
+  it('handles en passant capture with stm in check by the to-be-captured pawn', /* TODO */);
+
+  it('rejects invalid en passant with stm in check', /* TODO */);
 });

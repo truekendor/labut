@@ -104,8 +104,14 @@ public:
                     } else {
                         candidate = { sq, toSq };
                     }
+
+                    pc = pos.piece_on(sq);
+                    if (type_of(pc) == KING && (std::abs(file_of(sq) - file_of(toSq)) >= 2 || pos.piece_on(toSq) == make_piece(us, ROOK)))
+                        candidate = Move::make<CASTLING>(sq, toSq);
                     break;
                 }
+
+                pc = make_piece(us, PAWN);
 
                 // sq is the target of a forward pawn move, e.g. "e4"
                 int push = pawn_push(us);
@@ -127,25 +133,31 @@ public:
             if (!pc)
                 pc = make_piece(us, promoMap[*read++ - 'A']);
 
-            std::optional<File> fileDisambig = to_file(*read);
+            std::optional<File> fileDisambig = to_file(*read), toFile;
             read += fileDisambig.has_value();
-            std::optional<Rank> rankDisambig = to_rank(*read);
+            std::optional<Rank> rankDisambig = to_rank(*read), toRank;
             read += rankDisambig.has_value();
 
             bool captures = *read == 'x';
             read += captures;
 
-            // Now we expect a square...
-            auto toFile = to_file(*read++);
-            if (!toFile.has_value()) return std::nullopt;
-            auto toRank = to_rank(*read++);
-            if (!toFile.has_value()) return std::nullopt;
+            // We expect a square if there's a capture, there's a following file, or at least one missing disambiguation
+            if (captures || to_file(*read) || (!fileDisambig.has_value() || !rankDisambig.has_value())) {
+                toFile = to_file(*read++);
+                if (!toFile.has_value()) return std::nullopt;
+                toRank = to_rank(*read++);
+                if (!toFile.has_value()) return std::nullopt;
+            } else {
+                // No disambiguations after all
+                toFile = std::exchange(fileDisambig, std::nullopt);
+                toRank = std::exchange(rankDisambig, std::nullopt);
+            }
 
             Square toSq = make_square(*toFile, *toRank);
 
             Bitboard candidatePieces = pos.pieces(us, type_of(pc));
-            if (fileDisambig) candidatePieces &= FILE_A << *fileDisambig;
-            if (rankDisambig) candidatePieces &= RANK_1 << 8 * *rankDisambig;
+            if (fileDisambig) candidatePieces &= FileABB << *fileDisambig;
+            if (rankDisambig) candidatePieces &= Rank1BB << 8 * *rankDisambig;
 
             if (!candidatePieces) return std::nullopt;
 
@@ -170,13 +182,17 @@ public:
 found:;
 
         if (*read == '=') {  // read a promotion
+            printf("Reading promotion!\n");
             if (type_of(pc) != PAWN) return std::nullopt;
 
+            printf("Reading promotion2!\n");
             char c = read[1];
             if (c <= 'A' || c >= 'Z') return std::nullopt;
 
+            printf("Reading promotion3!\n");
             PieceType pt = promoMap[c - 'A'];
             if (!pt) return std::nullopt;            
+            printf("Reading promotion4 %d %d!\n", candidate.from_sq(), candidate.to_sq());
 
             candidate = Move::make<PROMOTION>(candidate.from_sq(), candidate.to_sq(), pt);
         }
@@ -200,7 +216,14 @@ found:;
 
     void emit_lan_move(Move move) {
         emit_square(move.from_sq());
+        if (move.type_of() == CASTLING) {
+            bool kingside = move.to_sq() > move.from_sq();
+            Square kingDest = make_square(kingside ? File(6) : File(2), rank_of(move.from_sq()));
+            emit_square(kingDest);
+            return;
+        }
         emit_square(move.to_sq());
+
         if (move.type_of() == PROMOTION) {
             *movesEnd++ = PieceToChar[make_piece(BLACK, move.promotion_type())];
         }
@@ -216,6 +239,17 @@ found:;
         PieceType pt = type_of(pc);
         Color us = color_of(pc);
 
+        if (move.type_of() == CASTLING) {
+            *movesEnd++ = 'O';
+            *movesEnd++ = '-';
+            *movesEnd++ = 'O';
+            if (toSq < fromSq)  {
+                *movesEnd++ = '-';
+                *movesEnd++ = 'O';
+            }
+            return;
+        }
+
         if (pt == PAWN) {
             if (file_of(fromSq) == file_of(toSq)) { // "e4"
                 emit_square(toSq);
@@ -229,7 +263,7 @@ found:;
                 *movesEnd++ = PieceToChar[move.promotion_type()];
             }
         } else {
-            Bitboard others = pos.pieces(pt, us) ^ fromSq;
+            Bitboard others = pos.pieces(us, pt) ^ fromSq;
             Bitboard ambiguous = 0;
 
             *movesEnd++ = PieceToChar[pt];
@@ -242,9 +276,9 @@ found:;
 
             if (ambiguous) {
                 // If none are on the same file, then that's sufficient disambiguation
-                if (!(ambiguous & (FILE_A << 8 * file_of(fromSq)))) {
+                if (!(ambiguous & (FileABB << file_of(fromSq)))) {
                     emit_file(file_of(fromSq));
-                } else if (!(ambiguous & (RANK_1 << 8 * rank_of(fromSq)))) {
+                } else if (!(ambiguous & (Rank1BB << 8 * rank_of(fromSq)))) {
                     emit_rank(rank_of(fromSq));
                 } else {
                     emit_square(fromSq);
@@ -260,6 +294,7 @@ found:;
     /** Returns true if an error occurred, false otherwise. The converted result can be fetched with getMovesString. Both LAN and SAN moves are accepted as input. */
     bool playMoves(const std::string& moves, bool emitLAN) {
         err = std::nullopt;
+        movesEnd = movesStr;
 
         const char* read = moves.data();
 
@@ -269,12 +304,17 @@ found:;
             // Done reading moves
             if (!*read) break;
 
+            if (*movesEnd == ' ') movesEnd++;
+
             // Find end of move string
             const char* end_move = read + 1;
             while (*end_move && !isspace(*end_move)) end_move++;
 
             auto move = parse_move(read, end_move);
-            if (!move.has_value()) return true; // fail
+            if (!move.has_value()) {
+                err = "Illegal move: " + std::string(read, end_move - read);
+                return true; // fail
+            }
 
             if (emitLAN) {
                 emit_lan_move(*move);
@@ -293,7 +333,7 @@ found:;
                     *movesEnd++ = '+';
             }
 
-            *movesEnd++ = ' ';
+            *movesEnd = ' ';
             read = end_move;
         }
         return false;
