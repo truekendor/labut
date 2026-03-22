@@ -58,7 +58,6 @@ constexpr Bitboard Rank6BB = Rank1BB << (8 * 5);
 constexpr Bitboard Rank7BB = Rank1BB << (8 * 6);
 constexpr Bitboard Rank8BB = Rank1BB << (8 * 7);
 
-extern uint8_t PopCnt16[1 << 16];
 extern uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
 
 extern Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
@@ -213,92 +212,21 @@ constexpr int constexpr_popcount(Bitboard b) {
 
 // Counts the number of non-zero bits in a bitboard.
 inline int popcount(Bitboard b) {
-
-#ifndef USE_POPCNT
-
-    std::uint16_t indices[4];
-    std::memcpy(indices, &b, sizeof(b));
-    return PopCnt16[indices[0]] + PopCnt16[indices[1]] + PopCnt16[indices[2]]
-         + PopCnt16[indices[3]];
-
-#elif defined(_MSC_VER)
-
-    return int(_mm_popcnt_u64(b));
-
-#else  // Assumed gcc or compatible compiler
-
     return __builtin_popcountll(b);
-
-#endif
 }
 
 // Returns the least significant bit in a non-zero bitboard.
 inline Square lsb(Bitboard b) {
     assert(b);
 
-#if defined(__GNUC__)  // GCC, Clang, ICX
-
     return Square(__builtin_ctzll(b));
-
-#elif defined(_MSC_VER)
-    #ifdef _WIN64  // MSVC, WIN64
-
-    unsigned long idx;
-    _BitScanForward64(&idx, b);
-    return Square(idx);
-
-    #else  // MSVC, WIN32
-    unsigned long idx;
-
-    if (b & 0xffffffff)
-    {
-        _BitScanForward(&idx, int32_t(b));
-        return Square(idx);
-    }
-    else
-    {
-        _BitScanForward(&idx, int32_t(b >> 32));
-        return Square(idx + 32);
-    }
-    #endif
-#else  // Compiler is neither GCC nor MSVC compatible
-    #error "Compiler not supported."
-#endif
 }
 
 // Returns the most significant bit in a non-zero bitboard.
 inline Square msb(Bitboard b) {
     assert(b);
 
-#if defined(__GNUC__)  // GCC, Clang, ICX
-
     return Square(63 ^ __builtin_clzll(b));
-
-#elif defined(_MSC_VER)
-    #ifdef _WIN64  // MSVC, WIN64
-
-    unsigned long idx;
-    _BitScanReverse64(&idx, b);
-    return Square(idx);
-
-    #else  // MSVC, WIN32
-
-    unsigned long idx;
-
-    if (b >> 32)
-    {
-        _BitScanReverse(&idx, int32_t(b >> 32));
-        return Square(idx + 32);
-    }
-    else
-    {
-        _BitScanReverse(&idx, int32_t(b));
-        return Square(idx);
-    }
-    #endif
-#else  // Compiler is neither GCC nor MSVC compatible
-    #error "Compiler not supported."
-#endif
 }
 
 // Returns the bitboard of the least significant
