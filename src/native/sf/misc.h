@@ -1,5 +1,9 @@
 #pragma once
 
+inline bool isspace(char c) {
+    return c == ' ' || c == '\n' || c == '\t';
+}
+
 class PRNG {
 
     uint64_t s;

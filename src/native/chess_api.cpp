@@ -11,10 +11,6 @@ using namespace Stockfish;
 
 static bool initialized = false;
 
-bool isspace(char c) {
-    return c == '\n' || c == '\t' || c == ' ';
-}
-
 std::optional<Rank> to_rank(char c) {
     return (c >= '1' && c <= '8') ? std::optional(Rank(c - '1')) : std::nullopt;
 }
