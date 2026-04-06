@@ -124,28 +124,11 @@ public:
                         }
                         candidate = Move::make<CASTLING>(sq, toSq);
                     }
-                    break;
-                }
-
-                pc = make_piece(us, PAWN);
-
-                // sq is the target of a forward pawn move, e.g. "e4"
-                int push = pawn_push(us);
-                for (int o : { sq - push, sq - 2 * push }) {
-                    Square fromSq = Square(o);
-                    if (is_ok(fromSq) && pos.pieces(PAWN) & fromSq) {
-                        read += 2;
-                        candidate = Move(fromSq, sq);
-                        goto found;
+                    
+                    if(type_of(pc) == PAWN && toSq == pos.ep_square()) {
+                        candidate = Move::make<EN_PASSANT>(sq, toSq);
                     }
-                }
-
-                err = "No valid pawn.";
-                return std::nullopt;
-            }
-
-            pc = make_piece(us, PAWN);
-            [[fallthrough]];
+                    break;
         }
         case 'B': case 'Q': case 'N': case 'K': case 'R': {
             if (!pc)
@@ -188,7 +171,7 @@ public:
                 if (attacks & toSq) {
                     candidate = Move(fromSq, toSq);
 
-                    if (type_of(pc) == PAWN && captures && !(pos.pieces(~us) & toSq)) {
+                    if (type_of(pc) == PAWN && captures && toSq == pos.ep_square()) {
                         candidate = Move::make<EN_PASSANT>(fromSq, toSq);
                     }
 
